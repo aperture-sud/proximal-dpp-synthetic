@@ -1,0 +1,329 @@
+\documentclass[10pt]{article}
+
+% Standalone layout: compiles in a blank Overleaf project without the
+% official ICLR style file. For submission, replace this preamble with
+% \usepackage{iclr2027_conference,times} plus the conference template.
+\usepackage[letterpaper,margin=1in]{geometry}
+\usepackage{times}
+\usepackage{microtype}
+
+\usepackage{amsmath,amssymb,amsfonts,amsthm,mathtools,bm}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+\newtheorem{assumption}{Assumption}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{remark}{Remark}
+\newtheorem{corollary}{Corollary}
+\newtheorem{definition}{Definition}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\X}{\mathcal{X}}
+\newcommand{\F}{\mathcal{F}}
+\newcommand{\argmin}{\mathop{\mathrm{argmin}}}
+\newcommand{\dist}{\mathop{\mathrm{dist}}}
+
+\title{Proximal Drift-Plus-Penalty for Weakly Convex Optimization\\
+with Time-Average Constraints: A Soft Prompting Motivation}
+\author{Anonymous Authors}
+
+\begin{document}
+\maketitle
+
+
+\begin{abstract}
+Soft prompting provides a concrete setting in which an optimization
+objective must be balanced against operational constraints that are
+naturally imposed over a long horizon. We consider a stationary
+prompt-selection policy and use this setting to motivate weakly convex
+optimization with one ordinary constraint and one long-run constraint that
+may itself change from round to round. We develop a proximal
+drift-plus-penalty (DPP) method in which the long-run constraint is
+stabilized before queue weighting. The stabilization makes the
+queue-weighted constraint component strongly convex and yields a proximal
+subproblem with a queue-independent baseline curvature. We prove a
+pointwise $O(V)$ virtual-queue bound, an $O(V/T)$ time-average constraint
+guarantee, and an $O(1/V+1/T+V_T/T)$ bound on the squared
+near-stationarity residual of the penalized problem, where $V_T$ is the
+cumulative functional variation of the per-round constraint loss. With
+additional Lipschitz and violating-point regularity assumptions, we
+convert this penalized stationarity guarantee into an
+$O(1/V+1/T+V_T/T)$ expected violation of the ordinary constraint for a
+uniformly sampled iterate. The resulting statement is deliberately a
+nearly-KKT guarantee rather than a claim of convergence of the entire
+nonconvex iterate sequence to an exact KKT point.
+\end{abstract}
+
+\section{Problem Formulation and Assumptions}
+\label{sec:problem}
+
+We study the constrained problem
+\begin{equation}
+\min_{x\in\X} f(x)
+\quad\text{s.t.}\quad
+g(x)\leq0,
+\qquad
+\limsup_{T\to\infty}\frac1T\sum_{t=1}^T h_t(x_t)\leq0,
+\label{eq:main-problem}
+\end{equation}
+where $h_t$ is the constraint loss in force at round $t$: if $x_t$ denotes
+the decision used at round $t$, the operational requirement is on the
+\emph{time average} of the sequence $h_1,h_2,\ldots$ evaluated along the
+algorithm's own trajectory. Nothing below assumes $h_t$ is the same
+function from one round to the next.
+
+We enforce the ordinary constraint through the exact hinge penalty
+\begin{equation}
+P(x)=f(x)+\beta[g(x)]_+,
+\qquad
+[a]_+:=\max\{a,0\}.
+\label{eq:P}
+\end{equation}
+
+\begin{assumption}[Decision set and boundedness]
+\label{ass:compact}
+$\X$ is nonempty, closed, convex, and compact, with diameter
+$\sup_{x,y\in\X}\|x-y\|\leq D$. The functions $f,g$, and every $h_t$ are
+finite on an open neighborhood of $\X$.
+\end{assumption}
+
+\begin{assumption}[Weak convexity]
+\label{ass:weak}
+$f$ is $\rho_f$-weakly convex, $g$ is $\rho_g$-weakly convex, and for
+every $t$, $h_t$ is $\rho_h$-weakly convex on a neighborhood of $\X$.
+Since $[g]_+$ is also $\rho_g$-weakly convex, $\rho_P:=\rho_f+\beta\rho_g$
+is a valid weak-convexity modulus for $P$.
+\end{assumption}
+
+\begin{assumption}[Lipschitz continuity]
+\label{ass:lipschitz}
+$f,g$, and every $h_t$ are respectively $L_f,L_g,L_h$-Lipschitz on $\X$.
+\end{assumption}
+
+\begin{assumption}[Bounded constraint values]
+\label{ass:boundedh}
+For all $t$ and all $x\in\X$, $|h_t(x)|\leq H$.
+\end{assumption}
+
+\begin{assumption}[Strict time-average feasibility]
+\label{ass:slater}
+There exists a point $x^{\circ}\in\X$ and $\xi>0$ such that
+$h_t(x^{\circ})\leq-\xi$ for all $t$.
+\end{assumption}
+
+This is a Slater-type condition for the time-average constraint, required
+to hold at a single common comparison point across every round.
+\textbf{Importantly, $x^{\circ}$ need not minimize $P$} --- it is used
+only as a comparison point in the queue argument, and the proof of
+Lemma~\ref{lem:queuepoint} below drops $P(x_{t+1})$ only as far as its
+global lower bound $P_{\min}$, never as far as $P(x^{\circ})$ itself. The
+strict margin is needed because the stabilization term
+$\gamma\|x-x_t\|^2$ consumes part of it.
+
+\begin{assumption}[Violating-point regularity for the ordinary constraint]
+\label{ass:vp}
+There exists $\kappa_g>0$ such that, for every $x\in\X$ satisfying
+$g(x)>0$,
+\[
+\dist\bigl(0,\ \beta\,\partial g(x)+N_{\X}(x)\bigr)\geq\kappa_g.
+\]
+For a smooth constraint and an interior point of $\X$, this reduces to
+$\beta\|\nabla g(x)\|\geq\kappa_g$ whenever $g(x)>0$.
+\end{assumption}
+
+\begin{assumption}[Algorithmic parameters]
+\label{ass:params}
+Choose
+\[
+\frac{\rho_h}{2}<\gamma<\frac{\xi}{D^2},
+\qquad
+0<\eta<\frac1{\rho_P}
+\]
+(any $\eta>0$ when $\rho_P=0$), and let $V\geq1$. Initialize $Q_1=0$.
+\end{assumption}
+
+\section{Algorithm}
+\label{sec:algorithm}
+
+At round $t$, only $h_t$ --- the constraint function \emph{currently in
+force} --- is observed and used; nothing about $h_{t+1}, h_{t+2},\ldots$
+is required in advance.
+
+\begin{algorithm}[h]
+\caption{Proximal Drift-Plus-Penalty}
+\label{alg:pdpp}
+\begin{algorithmic}[1]
+\Require Initial point $x_1\in\X$, queue $Q_1=0$, parameters $V\geq1$,
+$\eta>0$, $\gamma>0$
+\For{$t=1,\ldots,T$}
+    \State Observe the current round's constraint function $h_t$
+    \State Compute
+    \[
+    x_{t+1}\in\argmin_{x\in\X}
+    \left\{
+    P(x)+\frac{Q_t}{V}\left[h_t(x)+\gamma\|x-x_t\|^2\right]
+    +\frac1{2\eta}\|x-x_t\|^2
+    \right\}
+    \]
+    \State Update the virtual queue
+    \[
+    Q_{t+1}\gets[Q_t+h_t(x_{t+1})]_+
+    \]
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\begin{lemma}[Uniform well-posedness]
+\label{lem:wellposed}
+Under Assumptions~\ref{ass:compact}--\ref{ass:params}, the subproblem in
+Algorithm~\ref{alg:pdpp} is strongly convex with modulus
+\[
+\mu_t=\frac1\eta-\rho_P+q_t(2\gamma-\rho_h)\geq\mu_0:=\frac1\eta-\rho_P>0,
+\qquad q_t:=\frac{Q_t}{V},
+\]
+for every $t$, regardless of which $h_t$ is in force that round.
+Consequently $x_{t+1}$ is unique.
+\end{lemma}
+
+\section{Pointwise Queue Bound}
+\label{sec:guarantees}
+
+Let $P_{\min}:=\min_{x\in\X}P(x)$, $P_{\max}:=\max_{x\in\X}P(x)$, and
+define
+\[
+C_\circ:=P(x^{\circ})-P_{\min}+\frac{D^2}{2\eta},
+\qquad
+\bar\xi:=\xi-\gamma D^2>0,
+\qquad
+\bar q:=\frac{2C_\circ}{\bar\xi}+H.
+\]
+
+\begin{lemma}[Pointwise queue bound]
+\label{lem:queuepoint}
+Under Assumptions~\ref{ass:compact}--\ref{ass:params},
+$Q_t\leq 2VC_\circ/\bar\xi+H$ for all $t$. Consequently, for $V\geq1$,
+$q_t\leq\bar q$ for all $t$.
+\end{lemma}
+
+This holds already under Assumptions~\ref{ass:compact}--\ref{ass:params}
+as stated --- each $h_t$ may differ from round to round, so long as it
+satisfies the \emph{uniform} moduli/bound/margin those assumptions
+require of \emph{every} $t$.
+
+\section{Functional Variation and the Movement/Stationarity Bounds}
+\label{sec:tv}
+
+The queue bound above does not depend on how much $h_t$ changes from one
+round to the next. The movement bound does: a lower bound on how
+$h_{t+1}$ differs from $h_t$ at the same point $x_{t+1}$ appears when the
+per-round potential is telescoped, and it must be paid for explicitly.
+
+\begin{definition}[Functional variation]
+\label{def:variation}
+Define the one-step functional variation
+$\Delta_t:=\sup_{x\in\X}|h_{t+1}(x)-h_t(x)|$
+and the cumulative variation $V_T:=\sum_{t=1}^{T-1}\Delta_t$; write
+$\nu_T:=V_T/T$ for the average functional variation.
+\end{definition}
+
+\begin{assumption}[Uniformity across rounds]
+\label{ass:tv}
+The moduli $\rho_h,L_h,H$ in Assumptions~\ref{ass:weak}--\ref{ass:boundedh}
+and the point $x^{\circ}$ and margin $\xi$ in
+Assumption~\ref{ass:slater} are common to every $t$ (not merely existing
+separately for each $t$).
+\end{assumption}
+
+\begin{lemma}[Well-posedness and pointwise queue bound, restated]
+\label{lem:tv-queue}
+Under Assumption~\ref{ass:tv}, Lemma~\ref{lem:wellposed} and
+Lemma~\ref{lem:queuepoint} hold with the same constants $\mu_0$,
+$C_\circ$, $\bar\xi$, $\bar q$ at every $t$, uniformly over the whole run.
+\end{lemma}
+
+\begin{theorem}[Long-run constraint feasibility]
+\label{thm:feasibility}
+Under the assumptions above,
+\begin{equation}
+\frac1T\sum_{t=1}^T h_t(x_{t+1})
+\leq
+\frac{2VC_\circ}{\bar\xi T}+\frac HT.
+\label{eq:avg-feas}
+\end{equation}
+Consequently, the time-average constraint violation is $O(V/T)$.
+\end{theorem}
+
+\begin{theorem}[Movement and nearly-stationary guarantee]
+\label{thm:movement}
+Define $c_0:=1/\eta-\rho_P/2>0$, $C_S:=P_{\max}-P_{\min}+2\bar qH$,
+$A:=1/\eta+2\gamma\bar q$. Let $\tau$ be uniform on $\{1,\ldots,T\}$, and
+define
+\[
+R_t:=\dist\bigl(0,\ \partial P(x_{t+1})+q_t\,\partial h_t(x_{t+1})
++N_{\X}(x_{t+1})\bigr).
+\]
+Then
+\begin{equation}
+\frac1T\sum_{t=1}^T\|x_{t+1}-x_t\|^2
+\leq
+\frac{C_S}{c_0T}+\frac{H^2}{c_0V}+\frac{\bar q\,V_T}{c_0T}+\frac{D^2}{T},
+\label{eq:movement-tv}
+\end{equation}
+and
+\begin{equation}
+\E[R_\tau^2]\leq A^2\cdot(\text{the right-hand side of \eqref{eq:movement-tv}})
+=O\!\left(\frac1V+\frac1T+\frac{V_T}{T}\right).
+\label{eq:residual-tv}
+\end{equation}
+Consequently $\E[R_\tau]=O\bigl(V^{-1/2}+T^{-1/2}+\sqrt{V_T/T}\bigr)$. If
+$h_t\equiv h$ is in fact constant in $t$, then $V_T=0$ and this recovers
+the time-invariant movement bound exactly.
+\end{theorem}
+
+\begin{theorem}[Nearly-feasible stationarity for the ordinary constraint]
+\label{thm:gfeas}
+Suppose in addition that
+$\dist(0,\beta\partial g(x)+N_{\X}(x))\geq\kappa_g$ whenever $g(x)>0$,
+that $L_f,L_h$ are uniform subgradient bounds, and define
+$\delta_g:=\kappa_g-L_f-\bar qL_h>0$,
+$G_g:=\sup_{x\in\X}[g(x)]_+$. Then
+\begin{equation}
+\E[g(x_{\tau+1})]_+
+\leq
+\frac{G_g}{\delta_g^2}\,\E[R_\tau^2]
+=
+O\!\left(\frac1V+\frac1T+\frac{V_T}{T}\right).
+\label{eq:gfeas-tv}
+\end{equation}
+\end{theorem}
+
+\begin{remark}[Interpretation]
+The temporal variation contributes only through $V_T/T$ in the squared
+stationarity residual. Thus $V_T=o(T)$ is sufficient for the variation
+penalty to vanish, while $V_T=O(1)$ recovers the stationary-order bound.
+A constraint that changes by a bounded total amount over the whole
+horizon costs nothing asymptotically; one that keeps drifting at a
+constant per-round rate ($V_T=\Theta(T)$) leaves a floor in the movement
+and residual bounds that $T\to\infty$ alone cannot remove.
+\end{remark}
+
+\bigskip
+\noindent\textit{Note: proofs of Lemma~\ref{lem:wellposed},
+Lemma~\ref{lem:queuepoint}, and
+Theorems~\ref{thm:feasibility}--\ref{thm:gfeas} were not part of the
+pasted text this draft was reconstructed from, so none are included here.
+A structurally equivalent time-invariant version of this paper (shown
+earlier in the same conversation) does contain full appendix proofs,
+built on the Lyapunov function
+$W_t=\tfrac12Q_t^2+\tfrac{V}{2\eta}\|x_t-x^{\circ}\|^2$; adapting them to
+$h_t$ only requires tracking the extra term
+$q_{t+1}(h_{t+1}(x_{t+1})-h_t(x_{t+1}))\le\bar q\,\Delta_t$ that appears
+when the per-round potential is telescoped across a round where the
+constraint function itself changed.}
+
+\end{document}

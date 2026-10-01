@@ -1,0 +1,5 @@
+[PASS] Assumptions 1-7 (gamma/eta windows non-empty)  -- gamma in (0.0375, 0.1000), eta in (0.0000, 11.5741)
+[PASS] Inner solver convergence (800 vs 200 iters agree)  -- ||x_800 - x_200|| = 0.00e+00
+[PASS] Telescoping inequality sum(h) <= Q at every t  -- 0 violations out of 300 steps
+[PASS] Theorem 3 validity threshold (kappa_g > L_f + q_bar*L_h)  -- delta_g = 19.4740
+[PASS] Empirical values stay within predicted bounds (V=2..80, T=600)
